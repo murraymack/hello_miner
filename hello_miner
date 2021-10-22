@@ -1,0 +1,387 @@
+#!/bin/bash
+
+#############################################################
+### ARG PARSE
+### -v --vpn ............... Connect to VPN if not already
+### -N --network-refresh ... Map network and store IP list
+### -t --timeout <INT> ..... Network timeout change, default 5
+### -c --count <STR> ....... Count Miners
+### -l --last .............. Print Last Network Map
+### -reset --reset ......... Resets specified controllers
+### -stop --stop ........... Stops specified controllers
+### -start --start ......... Starts specified controllers
+###
+#############################################################
+
+while (( "$#" )); do
+  case "$1" in
+     -v|--vpn)
+      VPN=1
+      shift
+      ;;
+     -N|--network-refresh)
+      NETWORK_REFRESH=1
+      shift
+      ;;
+    -t|--timeout)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        TIMEOUT=$2
+        shift 2
+      else
+        echo "Error: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    -c|--count)
+      COUNT_MINERS=1
+      shift
+      ;;
+    -l|--last)
+      LAST_REPORT=1
+      shift
+      ;;
+    -reset|--reset)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        RESET_CON=$2
+        shift 2
+      else
+        echo "Error: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    -stop|--stop)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        STOP_CON=$2
+        shift 2
+      else
+        echo "Error: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    -start|--start)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        START_CON=$2
+        shift 2
+      else
+        echo "Error: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    -*|--*=) # unsupported flags
+      echo "Error: Unsupported flag $1" >&2
+      exit 1
+      ;;
+    *) # preserve positional arguments
+      PARAMS="$PARAMS $1"
+      shift
+      ;;
+  esac
+done
+
+eval set -- "$PARAMS"
+
+echo "$START_CON"
+
+
+
+#############################################
+### LAST REPORT:  -l  --last
+#############################################
+
+[[ "$LAST_REPORT" == 1 ]] && cat /tmp/log/last.txt && exit 1
+
+#############################################
+### TIMEOUT:   -t  --timeout
+#############################################
+#
+#[[ "$TIMEOUT" -ge 0 ]] || TIMEOUT=${echo 2} && echo "Timeout Setting: $TIMEOUT"
+#
+
+#############################################
+### CONNECT TO VPN:  -v  --vpn
+#############################################
+
+if [ "$VPN" = 1 ]
+then
+  OVPN_CONF_FILE="/home/murphinator/ovpn-murray/murray.ovpn"
+  echo "Killing previous Open VPN Connections..."
+  sudo killall openvpn
+  sleep 1.5;
+  echo "Connecting to VPN using ${OVPN_CONF_FILE}"
+  openvpn --config $OVPN_CONF_FILE --daemon 2> /dev/null
+  sleep 3;
+fi
+
+#############################################
+### MAP VPN NETWORK AND GENERATE IP LIST
+### >> $IP_OUTPUT = /tmp/log/ip_output.txt
+#############################################
+
+if [ "$NETWORK_REFRESH" = 1 ]
+then
+
+  IP_LOG_DIR="/tmp/log/"
+  IP_TEMP_1="${IP_LOG_DIR}ipresults1.txt"
+  IP_OUTPUT="${IP_LOG_DIR}ip_output.txt"
+  NETWORK_REFRESH=${NETWORK_REFRESH} # From Arg Parse Section
+  IP_COUNT=$( grep '' ${IP_OUTPUT} | wc -l )
+
+  [[ ! -n "$TIMEOUT" ]] || TIMEOUT=5
+
+  mkdir -p ${IP_LOG_DIR}
+  rm ${IP_TEMP_1} 2> /dev/null
+  rm ${IP_OUTPUT} 2> /dev/null
+  touch ${IP_OUTPUT}
+
+	date
+	echo "Performing IP Scan"
+
+	x=0
+	RETRIES=4
+	EXPECTED_HOSTS=25
+
+	while [[ x -le ${RETRIES} ]]
+	do
+
+	  for ip in 192.168.168.{3..253}; do
+	    fping -t 1000 $ip | grep "alive" | grep -oE '[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+' >> $IP_TEMP_1 &
+	  done
+	  wait
+
+	  awk '!a[$0]++' $IP_TEMP_1 | sort > $IP_OUTPUT
+
+	  IP_COUNT=$( grep '' ${IP_OUTPUT} | wc -l )
+
+	  if [ ${IP_COUNT} -gt ${EXPECTED_HOSTS} ]
+	  then
+	    break
+	  fi
+
+	  x=$((x+1))
+
+	done
+
+	if [[ x -ge ${RETRIES} ]]
+	then
+	  echo "Network Mapping Retries Exceeded. Check connection."
+	  rm $IP_TEMP_1 2> /dev/null
+	  exit 1
+	else
+	  printf "IP Scan Complete, number of hosts found: " && grep -c '' ${IP_OUTPUT}
+	  echo "Results saved in ${IP_OUTPUT}"
+	  rm $IP_TEMP_1 2> /dev/null
+	fi
+
+else
+	  for ip in 192.168.168.{3..253}; do
+	    fping -t 600 $ip > /dev/null 2>&1 &
+	  done
+	  wait
+fi
+
+#############################################
+### Build list of host names from network
+### >> $REPORT_OUT = /tmp/log/last.txt
+#############################################
+
+TIMEOUT=$(echo '1')
+
+echo "Retrieving Network Host Names"
+
+for i in $(cat "$IP_OUTPUT"); do
+  ssh -o "StrictHostKeyChecking no" -o Batchmode=yes -o ConnectTimeout="$TIMEOUT" root@"$i" "grep 'host' /etc/config/network | grep -oE "CON[[:alnum:]]+" > /tmp/log/con.txt" 2> /dev/null &
+done
+wait
+
+HOSTS_AND_IPS="/tmp/log/hosts_and_ips.txt"
+rm "$HOSTS_AND_IPS"
+touch "$HOSTS_AND_IPS"
+
+for i in $(cat "$IP_OUTPUT"); do
+  ssh -o "StrictHostKeyChecking no" -o Batchmode=yes -o ConnectTimeout="$TIMEOUT" root@"$i" "CONn=\$(cat /tmp/log/con.txt); echo \"[ \$CONn ] ....... ${i}\"" >> "$HOSTS_AND_IPS" 2> /dev/null &
+done
+wait
+
+sort -o "$HOSTS_AND_IPS"{,}
+
+echo "Network Host Names Obtained"
+
+HOST_NUMBERS="/tmp/log/host_numbers.txt"
+grep -oE "CON[[:alnum:]]+" "$HOSTS_AND_IPS" | grep -oE "[[:digit:]]+" > "$HOST_NUMBERS"
+
+START=$(head -1 "$HOST_NUMBERS")
+FINISH=$(tail -1 "$HOST_NUMBERS")
+START_NUM=$(expr "$START")
+FINISH_NUM=$(expr "$FINISH")
+REPORT_OUT="/tmp/log/last.txt" 2> /dev/null
+rm "$REPORT_OUT" 2> /dev/null
+
+for i in $(seq "$START_NUM" "$FINISH_NUM"); do
+  if [ $i -lt 10 ]
+  then
+    CON_STRING="CON0${i}"
+    CON_CHECK=$(grep ${CON_STRING} ${HOSTS_AND_IPS} | wc -l)
+  else
+    CON_STRING="CON${i}"
+    CON_CHECK=$(grep ${CON_STRING} ${HOSTS_AND_IPS} | wc -l)
+  fi
+
+  if [ $(expr $CON_CHECK) == 1 ]
+  then
+    printf "[ OK ] $CON_STRING Online ... " && grep "$CON_STRING" "$HOSTS_AND_IPS" | grep -oE "[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+"
+  else
+    echo "[ ERROR ] $CON_STRING Absent or Offline"
+  fi
+done > "$REPORT_OUT"
+cat "$REPORT_OUT"
+
+#############################################
+### Controller List Presets
+#############################################
+
+LIST_PRESETS="ALL|GEN1|GEN2|PC01|PC02|PC03|PC04|PC05|PC06|PC07|PC08|PC09|PC10|PC11|PC12"
+GEN1="CON01,CON02,CON03,CON04,CON05,CON06,CON07,CON08,CON09,CON10,CON11,CON12,CON13,CON14,CON15,CON16,CON17,CON18,CON19,CON20,CON21,CON22,CON23,CON24,CON25,CON26,CON27,CON28,CON29,CON30,CON31"
+GEN2="CON32,CON33,CON34,CON35,CON36,CON37,CON38,CON39,CON40,CON41,CON42,CON43,CON44,CON45,CON46,CON47,CON48,CON49,CON50,CON51,CON52,CON53"
+PC01="CON01,CON02,CON03,CON04"
+PC02="CON05,CON06,CON07,CON08,CON09"
+PC03="CON10,CON11,CON12,CON13"
+PC04="CON14,CON15,CON16,CON17,CON18"
+PC05="CON19,CON20,CON21,CON22"
+PC06="CON23,CON24,CON25,CON26,CON27"
+PC07="CON28,CON29,CON30,CON31"
+PC08="CON32,CON33,CON34,CON35"
+PC09="CON36,CON37,CON38,CON39,CON40"
+PC10="CON41,CON42,CON43,CON44"
+PC11="CON45,CON46,CON47,CON48,CON49"
+PC12="CON50,CON51,CON52,CON53"
+ALL="${GEN1},${GEN2}"
+
+if [[ "$RESET_CON" =~ ^($LIST_PRESETS)$ ]];
+   then
+     RESET_ARG=$RESET_CON
+     TEMP_RESET=$(echo ${LIST_PRESETS} | grep -oE "$RESET_CON")
+     RESET_CON=${!TEMP_RESET}
+fi
+
+if [[ "$STOP_CON" =~ ^($LIST_PRESETS)$ ]];
+   then
+     STOP_ARG=$STOP_CON
+     TEMP_STOP=$(echo ${LIST_PRESETS} | grep -oE "$STOP_CON")
+     STOP_CON=${!TEMP_STOP}
+fi
+
+if [[ "$START_CON" =~ ^($LIST_PRESETS)$ ]];
+   then
+     START_ARG=$START_CON
+     TEMP_START=$(echo ${LIST_PRESETS} | grep -oE "$START_CON")
+     START_CON=${!TEMP_START}
+fi
+
+#############################################
+### RESET START STOP
+#############################################
+
+if [[ ${#RESET_CON} -gt 0 ]];
+then
+   RESET_LIST="/tmp/log/reset_list"
+   echo "$RESET_CON" | awk -F',' '{for(i=1;i<=NF;i++){print $i}}' > "$RESET_LIST"
+   for x in $(cat "$RESET_LIST");
+   do
+      RESET_IP=$(grep -w "$x" "$REPORT_OUT" | grep -oE '[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+')
+      echo ""
+      echo "Resetting ${x} at ${RESET_IP}"
+      ##### SSH RESET COMMANDS HERE #####
+      ssh root@"$RESET_IP" "printf 'SSH successful... Resetting ' && cat /tmp/log/con.txt; cgminer-api restart; sleep 1; /usr/bin/cgminer-monitor >/dev/null 2>&1; ps | grep cgminer && echo "Reset Successful"; exit"
+      date
+      ##### SSH RESET COMMANDS HERE #####
+   done
+   wait
+fi
+
+if [[ ${#START_CON} -gt 0 ]];
+then
+   START_LIST="/tmp/log/start_list"
+   echo "$START_CON" | awk -F',' '{for(i=1;i<=NF;i++){print $i}}' > "$START_LIST"
+   for x in $(cat "$START_LIST");
+   do
+      START_IP=$(grep -w "$x" "$REPORT_OUT" | grep -oE '[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+')
+      echo ""
+      echo "STARTING ${x} at ${START_IP}"
+      ##### SSH START COMMANDS HERE #####
+      ssh root@"$START_IP" "printf 'SSH successful... Starting ' && cat /tmp/log/con.txt; mkdir -p /etc/tmp/; echo \"*/3 * * * * /usr/bin/cgminer-monitor\" > /etc/tmp/root; crontab -u root /etc/tmp/root; /usr/bin/cgminer-monitor >/dev/null 2>&1; echo "Start Successful"; exit"
+      date
+      ##### SSH START COMMANDS HERE #####
+   done
+   wait
+fi
+
+if [[ ${#STOP_CON} -gt 0 ]];
+then
+   STOP_LIST="/tmp/log/stop_list"
+   echo "$STOP_CON" | awk -F',' '{for(i=1;i<=NF;i++){print $i}}' > "$STOP_LIST"
+   for x in $(cat "$STOP_LIST");
+   do
+      echo ""
+      STOP_IP=$(grep -w "$x" "$REPORT_OUT" | grep -oE '[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+')
+      echo "Stopping ${x} at ${STOP_IP}"
+      ##### SSH STOP COMMANDS HERE #####
+      ssh root@"$STOP_IP" "printf 'SSH successful... Stopping ' && cat /tmp/log/con.txt; mkdir -p /etc/tmp/; echo \"\" > /etc/tmp/root; crontab -u root /etc/tmp/root; killall cgminer && echo "Stop successful""
+      date
+      ##### SSH STOP COMMANDS HERE #####
+   done
+   wait
+fi
+
+#######################
+### SSH PULLS
+#######################
+
+CGSTATS="cgminer-api -o stats"
+CONx="cgminer-api pools | grep -oE '\[User\] .{0,}' | grep -oE -m 1 '\..{0,}' | cut -c 2-"
+CONout="$CONx >> /tmp/log/con.txt"
+MINER_COUNT="$CGSTATS | grep -oE 'Temp\[[[:digit:]]+\]' | grep -oE 'Temp' -c"
+TEMPS_LIST="$CGSTATS | grep -oE 'Temp\[[[:digit:]]+\]' | grep -oE '\[[[:digit:]]+' | cut -c 2-"
+TEMPS_AVG="$TEMPS_LIST | awk '{ SUM += \$1; n++ } END { if (n > 0) print SUM / n; }'"
+TEMPS_TOPk="$TEMPS_LIST | sort -nr | head -n 5"
+GHS_LIST="$CGSTATS | grep -oE 'GHSmm\[[[:digit:]]+\.[[:digit:]]+\]' | grep -oE '[[:digit:]+\.[[:digit:]]+' | cut -c 2-"
+GHS_AVG="$GHS_LIST | awk '{ SUM += \$1; n++ } END { if (n > 0) print SUM / n; }'"
+GHS_BOTk="$GHS_LIST | sort -nk 2 | head -n 5"
+
+DATE=$(date +'%c %s')
+EXT=".txt"
+BASE_PATH="/tmp/log/"
+
+COUNT_MINERS=${COUNT_MINERS} # From Arg Parse
+
+#if [[ ${COUNT_MINERS} = 1 ]];
+#then
+	#while read -r x;
+	#do
+	#  GREP_CON=$(echo "$x" | grep -oE 'CON[[:digit:]]+')
+	#  GREP_IP=$(echo "$x" | grep -oE '[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+')
+	#  #ssh root@"$GREP_IP" "mkdir -p /tmp/log/; CONn=\$(cat /tmp/log/con.txt); touch \"${BASE_PATH}\${CONn} ${DATE}${EXT}\"; echo 'MINER_COUNT' >> \"${BASE_PATH}\${CONn} ${DATE}${EXT}\"; $MINER_COUNT >> \"${BASE_PATH}\${CONn} ${DATE}${EXT}\""
+	#  #ssh root@"$GREP_IP" "CONn=\$(cat /tmp/log/con.txt); printf \"\${CONn} Count: \"; printf \"$MINER_COUNT \n\""
+	#  echo "${GREP_CON} - COUNT: " && ssh root@"$GREP_IP" "$MINER_COUNT" 2> /dev/null
+	#  wait
+	#done < "$REPORT_OUT"
+#fi
+
+#	ssh root@192.168.168.105 "echo 'SSH Connection established'; uptime; touch \"${BASE_PATH}\${CONn} ${DATE}${EXT}\""
+#	ssh root@192.168.168.105 "CONn=\$(cat /tmp/log/con.txt); echo \${CONn}; touch \"${BASE_PATH}\${CONn} ${DATE}${EXT}\"; ls -Art /tmp/log/ | tail -n 1"
+#	ssh root@192.168.168.105 "echo 'MINER_COUNT' >> \"${BASE_PATH}\${CONn} ${DATE}${EXT}\"; $MINER_COUNT >> \"${BASE_PATH}\${CONn} ${DATE}${EXT}\""
+#	ssh root@192.168.168.105 "echo 'GHS_AVG' >> \"${BASE_PATH}\${CONn} ${DATE}${EXT}\"; $GHS_AVG >> \"${BASE_PATH}\${CONn} ${DATE}${EXT}\""
+#	ssh root@192.168.168.105 "echo 'GHS_BOT5' >> \"${BASE_PATH}\${CONn} ${DATE}${EXT}\"; $GHS_BOTk >> \"${BASE_PATH}\${CONn} ${DATE}${EXT}\""
+#	ssh root@192.168.168.105 "echo 'TEMPS_TOP5' >> \"${BASE_PATH}\${CONn} ${DATE}${EXT}\"; $TEMPS_TOPk >> \"${BASE_PATH}\${CONn} ${DATE}${EXT}\""
+#	ssh root@192.168.168.105 "echo 'TEMPS_AVG' >> \"${BASE_PATH}\${CONn} ${DATE}${EXT}\"; $TEMPS_AVG >> \"${BASE_PATH}\${CONn} ${DATE}${EXT}\""
+#	ssh root@192.168.168.105 "echo 'TEMPS_LIST' >> \"${BASE_PATH}\${CONn} ${DATE}${EXT}\"; $TEMPS_LIST >> \"${BASE_PATH}\${CONn} ${DATE}${EXT}\""
+#	ssh root@192.168.168.105 "echo '-----BEGIN LOG FILE-----'; cat \"${BASE_PATH}\${CONn} ${DATE}${EXT}\"; echo '----- END LOG FILE -----'"
+#	ssh root@192.168.168.105 "echo 'GHS List '; $GHS_LIST"
+#	ssh root@192.168.168.105 "echo 'GHS Avg'; $GHS_AVG"
+#	ssh root@192.168.168.105 "echo 'GHS Bottom 5'; $GHS_BOTk"
+
+#######################
+### DISCONNECT OPENVPN
+#######################
+
+echo ""
+echo "Goodbye"
