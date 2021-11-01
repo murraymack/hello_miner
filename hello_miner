@@ -93,9 +93,8 @@ echo "$START_CON"
 #############################################
 ### TIMEOUT:   -t  --timeout
 #############################################
-#
+
 #[[ "$TIMEOUT" -ge 0 ]] || TIMEOUT=${echo 2} && echo "Timeout Setting: $TIMEOUT"
-#
 
 #############################################
 ### CONNECT TO VPN:  -v  --vpn
@@ -116,6 +115,9 @@ fi
 ### MAP VPN NETWORK AND GENERATE IP LIST
 ### >> $IP_OUTPUT = /tmp/log/ip_output.txt
 #############################################
+
+DHCP_LEASES="/home/murphinator/hello_miner/dhcp_config"
+DHCP_IPs="/home/murphinator/hello_miner/dhcp_ips"
 
 if [ "$NETWORK_REFRESH" = 1 ]
 then
@@ -172,11 +174,37 @@ then
 	  rm $IP_TEMP_1 2> /dev/null
 	fi
 
-else
-	  for ip in 192.168.168.{3..253}; do
-	    fping -t 600 $ip > /dev/null 2>&1 &
-	  done
-	  wait
+else # If network refresh is not specified
+
+	counter=$((0))
+	rm -p /tmp/log/online_hosts
+	online_hosts="/tmp/log/online_hosts"
+	rm -p $online_hosts
+	touch $online_hosts
+
+	while read p; do
+
+	  # Regenerate $DHCP_IPs in case config changed
+	  if [ $counter -eq 0 ];
+	  then
+	    echo "Reinstancing DHCP_IPs at $DHCP_IPs"
+	    rm $DHCP_IPs
+	    touch $DHCP_IPs
+	  fi
+
+	  counter=$(($counter+1))
+
+	  ip=$(echo "$p" | grep -oE "[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+")
+	  echo $ip >> $DHCP_IPs
+	  echo "[ $counter ] Pinging $ip ..."
+	  fping -t 1000 $ip >> $online_hosts &
+
+	done <$DHCP_LEASES
+
+	sleep 1
+
+	IP_OUTPUT=$( cat $DHCP_IPs )
+
 fi
 
 #############################################
@@ -184,12 +212,11 @@ fi
 ### >> $REPORT_OUT = /tmp/log/last.txt
 #############################################
 
-TIMEOUT=$(echo '1')
-
 echo "Retrieving Network Host Names"
 
-for i in $(cat "$IP_OUTPUT"); do
-  ssh -o "StrictHostKeyChecking no" -o Batchmode=yes -o ConnectTimeout="$TIMEOUT" root@"$i" "grep 'host' /etc/config/network | grep -oE "CON[[:alnum:]]+" > /tmp/log/con.txt" 2> /dev/null &
+for ip in $( cat $DHCP_IPs ); do
+  echo "Attempting ssh into $ip ..."
+  ssh -o Batchmode=yes -o "StrictHostKeyChecking no" root@"$ip" "grep 'host' /etc/config/network | grep -oE "CON[[:alnum:]]+" > /tmp/log/con.txt" 2> /dev/null &
 done
 wait
 
@@ -197,8 +224,9 @@ HOSTS_AND_IPS="/tmp/log/hosts_and_ips.txt"
 rm "$HOSTS_AND_IPS"
 touch "$HOSTS_AND_IPS"
 
-for i in $(cat "$IP_OUTPUT"); do
-  ssh -o "StrictHostKeyChecking no" -o Batchmode=yes -o ConnectTimeout="$TIMEOUT" root@"$i" "CONn=\$(cat /tmp/log/con.txt); echo \"[ \$CONn ] ....... ${i}\"" >> "$HOSTS_AND_IPS" 2> /dev/null &
+for ip in $( cat $DHCP_IPs ); do
+  echo "Attempting to retrieve $ip con name..."
+  ssh -o Batchmode=yes -o "StrictHostKeyChecking no" root@"$ip" "CONn=\$(cat /tmp/log/con.txt); echo \"[ \$CONn ] ....... ${ip}\"" >> "$HOSTS_AND_IPS" 2> /dev/null &
 done
 wait
 
