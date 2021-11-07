@@ -59,6 +59,9 @@ done
 
 eval set -- "$PARAMS"
 
+DIR_SOURCE="/home/murphinator/hello_miner/"
+DIR_LOGS="/home/murphinator/hello_miner/logs/"
+
 LIST_PRESETS="ALL|GEN1|GEN2|PC01|PC02|PC03|PC04|PC05|PC06|PC07|PC08|PC09|PC10|PC11|PC12"
 GEN1="CON01,CON02,CON03,CON04,CON05,CON06,CON07,CON08,CON09,CON10,CON11,CON12,CON13,CON14,CON15,CON16,CON17,CON18,CON19,CON20,CON21,CON22,CON23,CON24,CON25,CON26,CON27,CON28,CON29,CON30,CON31"
 GEN2="CON32,CON33,CON34,CON35,CON36,CON37,CON38,CON39,CON40,CON41,CON42,CON43,CON44,CON45,CON46,CON47,CON48,CON49,CON50,CON51,CON52,CON53"
@@ -76,12 +79,13 @@ PC11="CON45,CON46,CON47,CON48,CON49"
 PC12="CON50,CON51,CON52,CON53"
 ALL="${GEN1},${GEN2}"
 
-REPORT_DIR="/home/murphinator/hello_miner/logs/last.txt"
+REPORT_DIR="${DIR_LOGS}last.txt"
 COUNT_CON_IP=$(grep -w "$COUNT_CON" "$REPORT_DIR" | grep -oE "[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+")
 HASH_CON_IP=$(grep -w "$HASH_CON" "$REPORT_DIR" | grep -oE "[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+")
 TEMP_CON_IP=$(grep -w "$TEMP_CON" "$REPORT_DIR" | grep -oE "[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+")
 CGSTATS="cgminer-api -o stats"
 MINER_COUNT="$CGSTATS | grep -oE 'Temp\[[[:digit:]]+\]' | grep -oE 'Temp' -c"
+
 MYDATE=$(date "+%Y-%m-%d-%s")
 
 echo $MYDATE
@@ -117,41 +121,44 @@ then
      COUNT_CON=${!TEMP_COUNT}
 fi
 
-
 # Function to generate log string for Count of miners via ssh
 get_count () {
-  ssh -o ConnectTimeout=10 -o "StrictHostKeyChecking no" -o "BatchMode yes" root@"$COUNT_CON_IP" "MYCON=\$(cat /tmp/log/con.txt); LOCAL_MINER_COUNT=\$($MINER_COUNT); \
+  ssh -o ConnectTimeout=10 -o "StrictHostKeyChecking no" -o "BatchMode yes" root@"$COUNT_CON_IP" "MYCON=\$(cat /etc/config/network | grep -oE 'CON[[:digit:]]+'); LOCAL_MINER_COUNT=\$($MINER_COUNT); \
   printf \"$DATE_STR,\$MYCON,Count,\${LOCAL_MINER_COUNT}\\n\""; \
   }
 
 
 # Remove old temporary output of --count call if it exists
-[[ ! -f /home/murphinator/hello_miner/logs/Count_Out.txt ]] || rm /home/murphinator/hello_miner/logs/Count_Out.txt
+#
+[[ ! -f ${DIR_LOGS}Count_Out.txt ]] || rm ${DIR_LOGS}Count_Out.txt
 
-# If Agg Count Log does not exist, create it.
-[[ ! -f /home/murphinator/hello_miner/logs/Count_Log_Agg.txt ]] || touch /home/murphinator/hello_miner/logs/Count_Log_Agg.txt
+
+# If Agg Count Log does not exist, create it
+#
+[[ ! -f ${DIR_LOGS}Count_Log_Agg.txt ]] || touch ${DIR_LOGS}Count_Log_Agg.txt
+
 
 # If -c or --count argument exists, loop through corresponding preset list and save output
+#
 if [[ ${#COUNT_CON} -gt 0 ]];
 then
-   COUNT_LIST="/home/murphinator/hello_miner/logs/count_list"
+   COUNT_LIST="${DIR_LOGS}count_list"
    echo "$COUNT_CON" | awk -F',' '{for(i=1;i<=NF;i++){print $i}}' > "$COUNT_LIST"
    for x in $(cat "$COUNT_LIST")
    do
       DATE_STR=$(date "+%Y-%m-%d-%s")
       COUNT_CON_IP=$(grep -w "$x" "$REPORT_DIR" | grep -oE '[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+')
       get_count &
-   done >> /home/murphinator/hello_miner/logs/Count_Out.txt
+   done >> ${DIR_LOGS}Count_Out.txt
    wait
-   sort /home/murphinator/hello_miner/logs/Count_Out.txt >> /tmp/log/home/murphinator/hello_miner/logs/Count_Log.txt
-   sort /home/murphinator/hello_miner/logs/Count_Out.txt
+   sort ${DIR_LOGS}Count_Out.txt >> ${DIR_LOGS}Count_Log.txt
+   sort ${DIR_LOGS}Count_Out.txt
 
-   TODAY_COUNT=$(awk -F',' -v DATE="$DATE_STR" '$1 ~ date {sum+=$4;} END {print sum;}' /home/murphinator/hello_miner/logs/Count_Out.txt)
-#   echo ${DATE_STR}
-#   awk -F',' -v DATE="$DATE_STR" '$1 ~ date {sum+=$4} END {print sum}' /tmp/log/Count_Out.txt
+   TODAY_COUNT=$(awk -F',' -v DATE="$DATE_STR" '$1 ~ date {sum+=$4;} END {print sum;}' ${DIR_LOGS}Count_Out.txt)
    echo "${DATE_STR} Current Count: $TODAY_COUNT"
 
 fi
+
 
 # Check if -h or --hash argument is contained in the preset list $PRESET_LIST,
 # If true, then re-assign --hash variable ($HASH_CON) to the corresponding preset
@@ -161,31 +168,37 @@ then
      HASH_CON=${!TEMP_COUNT}
 fi
 
+GHS_LIST="$CGSTATS | grep -oE 'GHSmm\[[[:digit:]]+\.[[:digit:]]+\]' | grep -oE '[[:digit:]+\.[[:digit:]]+' | cut -c 2-"
+GHS_AVG="$GHS_LIST | awk '{ SUM += \$1; n++ } END { if (n > 0) print SUM / n; }'"
+GHS_BOTk="$GHS_LIST | sort -nk 2 | head -n 5"
 
 # Function to generate log string for Count of miners via ssh
 get_hash () {
-  ssh -o ConnectTimeout=10 -o "StrictHostKeyChecking no" -o "BatchMode yes" root@"$COUNT_CON_IP" "MYCON=\$(cat /tmp/log/con.txt); LOCAL_MINER_COUNT=\$($MINER_COUNT); \
-  printf \"$DATE_STR,\$MYCON,Count,\${LOCAL_MINER_COUNT}\\n\""; \
+  ssh -o ConnectTimeout=10 -o "StrictHostKeyChecking no" -o "BatchMode yes" root@"$HASH_CON_IP" \
+  "MYCON=\$(cat /etc/config/network | grep -oE 'CON[[:digit:]]+'); LOCAL_GHS_LIST=\$($GHS_LIST); \
+  echo \$LOCAL_GHS_LIST | sed 's, ,\n,g' > \/tmp\/LOCAL_GHS_LIST; \
+  for x in \$(cat /tmp/LOCAL_GHS_LIST)
+  do
+    printf \"$DATE_STR,\$MYCON,Hash,\$x\\n\"
+  done;"
   }
 
 # If -h or --hash argument exists, loop through corresponding preset list and save output
-if [[ ${#COUNT_CON} -gt 0 ]];
+if [[ ${#HASH_CON} -gt 0 ]];
 then
-   HASH_LIST="/home/murphinator/hello_miner/logs/hash_list"
+   HASH_LIST="${DIR_LOGS}hash_list"
    echo "$HASH_CON" | awk -F',' '{for(i=1;i<=NF;i++){print $i}}' > "$HASH_LIST"
    for x in $(cat "$HASH_LIST")
    do
       DATE_STR=$(date "+%Y-%m-%d-%s")
       HASH_CON_IP=$(grep -w "$x" "$REPORT_DIR" | grep -oE '[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+')
       get_hash &
-   done >> /home/murphinator/hello_miner/logs/Hash_Out.txt
+   done >> ${DIR_LOGS}Hash_Out.txt
    wait
-   sort /home/murphinator/hello_miner/logs/Count_Out.txt >> /tmp/log/home/murphinator/hello_miner/logs/Count_Log.txt
-   sort /home/murphinator/hello_miner/logs/Count_Out.txt
+   sort ${DIR_LOGS}Hash_Out.txt >> ${DIR_LOGS}Hash_Log.txt
+   sort ${DIR_LOGS}Hash_Log.txt
 
-   TODAY_COUNT=$(awk -F',' -v DATE="$DATE_STR" '$1 ~ date {sum+=$4;} END {print sum;}' /home/murphinator/hello_miner/logs/Count_Out.txt)
-#   echo ${DATE_STR}
-#   awk -F',' -v DATE="$DATE_STR" '$1 ~ date {sum+=$4} END {print sum}' /tmp/log/Count_Out.txt
-   echo "${DATE_STR} Current Count: $TODAY_COUNT"
+   #TODAY_HASH=$(awk -F',' -v DATE="$DATE_STR" '$1 ~ date {sum+=$4;} END {print sum;}' ${DIR_LOGS}Hash_Out.txt)
+   #echo "${DATE_STR} Current Count: $TODAY_HASH"
 
 fi
