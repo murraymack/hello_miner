@@ -67,7 +67,7 @@ PC11="CON45,CON46,CON47,CON48,CON49"
 PC12="CON50,CON51,CON52,CON53"
 ALL="${GEN1},${GEN2}"
 
-REPORT_DIR="/tmp/log/last.txt"
+REPORT_DIR="/home/murphinator/hello_miner/logs/last.txt"
 COUNT_CON_IP=$(grep -w "$COUNT_CON" "$REPORT_DIR" | grep -oE "[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+")
 TEMP_CON_IP=$(grep -w "$TEMP_CON" "$REPORT_DIR" | grep -oE "[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+")
 CGSTATS="cgminer-api -o stats"
@@ -116,27 +116,27 @@ get_count () {
 
 
 # Remove old temporary output of --count call if it exists
-[[ ! -f /tmp/log/Count_Out.txt ]] || rm /tmp/log/Count_Out.txt
+[[ ! -f /home/murphinator/hello_miner/logs/Count_Out.txt ]] || rm /home/murphinator/hello_miner/logs/Count_Out.txt
 
 # If Agg Count Log does not exist, create it.
-[[ ! -f /tmp/log/Count_Log_Agg.txt ]] || touch /tmp/log/Count_Log_Agg.txt
+[[ ! -f /home/murphinator/hello_miner/logs/Count_Log_Agg.txt ]] || touch /home/murphinator/hello_miner/logs/Count_Log_Agg.txt
 
 # If -c or --count argument exists, loop through corresponding preset list and save output
 if [[ ${#COUNT_CON} -gt 0 ]];
 then
-   COUNT_LIST="/tmp/log/count_list"
+   COUNT_LIST="/home/murphinator/hello_miner/logs/count_list"
    echo "$COUNT_CON" | awk -F',' '{for(i=1;i<=NF;i++){print $i}}' > "$COUNT_LIST"
    for x in $(cat "$COUNT_LIST")
    do
       DATE_STR=$(date "+%Y-%m-%d-%s")
       COUNT_CON_IP=$(grep -w "$x" "$REPORT_DIR" | grep -oE '[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+')
       get_count &
-   done >> /tmp/log/Count_Out.txt
+   done >> /home/murphinator/hello_miner/logs/Count_Out.txt
    wait
-   sort /tmp/log/Count_Out.txt >> /tmp/log/Count_Log.txt
-   sort /tmp/log/Count_Out.txt
+   sort /home/murphinator/hello_miner/logs/Count_Out.txt >> /tmp/log/home/murphinator/hello_miner/logs/Count_Log.txt
+   sort /home/murphinator/hello_miner/logs/Count_Out.txt
 
-   TODAY_COUNT=$(awk -F',' -v DATE="$DATE_STR" '$1 ~ date {sum+=$4;} END {print sum;}' /tmp/log/Count_Out.txt)
+   TODAY_COUNT=$(awk -F',' -v DATE="$DATE_STR" '$1 ~ date {sum+=$4;} END {print sum;}' /home/murphinator/hello_miner/logs/Count_Out.txt)
 #   echo ${DATE_STR}
 #   awk -F',' -v DATE="$DATE_STR" '$1 ~ date {sum+=$4} END {print sum}' /tmp/log/Count_Out.txt
    echo "${DATE_STR} Current Count: $TODAY_COUNT"
