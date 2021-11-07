@@ -10,6 +10,15 @@ while (( "$#" )); do
       LAST_REPORT=1
       shift
       ;;
+    -h|--hash)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        HASH_CON=$2
+        shift 2
+      else
+        echo "Error: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
     -c|--count)
       if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
         COUNT_CON=$2
@@ -69,6 +78,7 @@ ALL="${GEN1},${GEN2}"
 
 REPORT_DIR="/home/murphinator/hello_miner/logs/last.txt"
 COUNT_CON_IP=$(grep -w "$COUNT_CON" "$REPORT_DIR" | grep -oE "[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+")
+HASH_CON_IP=$(grep -w "$HASH_CON" "$REPORT_DIR" | grep -oE "[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+")
 TEMP_CON_IP=$(grep -w "$TEMP_CON" "$REPORT_DIR" | grep -oE "[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+")
 CGSTATS="cgminer-api -o stats"
 MINER_COUNT="$CGSTATS | grep -oE 'Temp\[[[:digit:]]+\]' | grep -oE 'Temp' -c"
@@ -132,6 +142,43 @@ then
       COUNT_CON_IP=$(grep -w "$x" "$REPORT_DIR" | grep -oE '[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+')
       get_count &
    done >> /home/murphinator/hello_miner/logs/Count_Out.txt
+   wait
+   sort /home/murphinator/hello_miner/logs/Count_Out.txt >> /tmp/log/home/murphinator/hello_miner/logs/Count_Log.txt
+   sort /home/murphinator/hello_miner/logs/Count_Out.txt
+
+   TODAY_COUNT=$(awk -F',' -v DATE="$DATE_STR" '$1 ~ date {sum+=$4;} END {print sum;}' /home/murphinator/hello_miner/logs/Count_Out.txt)
+#   echo ${DATE_STR}
+#   awk -F',' -v DATE="$DATE_STR" '$1 ~ date {sum+=$4} END {print sum}' /tmp/log/Count_Out.txt
+   echo "${DATE_STR} Current Count: $TODAY_COUNT"
+
+fi
+
+# Check if -h or --hash argument is contained in the preset list $PRESET_LIST,
+# If true, then re-assign --hash variable ($HASH_CON) to the corresponding preset
+if [[ "$HASH_CON" =~ ^($LIST_PRESETS)$ ]];
+then
+     TEMP_COUNT=$(echo $LIST_PRESETS | grep -oE "$HASH_CON")
+     HASH_CON=${!TEMP_COUNT}
+fi
+
+
+# Function to generate log string for Count of miners via ssh
+get_hash () {
+  ssh -o ConnectTimeout=10 -o "StrictHostKeyChecking no" -o "BatchMode yes" root@"$COUNT_CON_IP" "MYCON=\$(cat /tmp/log/con.txt); LOCAL_MINER_COUNT=\$($MINER_COUNT); \
+  printf \"$DATE_STR,\$MYCON,Count,\${LOCAL_MINER_COUNT}\\n\""; \
+  }
+
+# If -h or --hash argument exists, loop through corresponding preset list and save output
+if [[ ${#COUNT_CON} -gt 0 ]];
+then
+   HASH_LIST="/home/murphinator/hello_miner/logs/hash_list"
+   echo "$HASH_CON" | awk -F',' '{for(i=1;i<=NF;i++){print $i}}' > "$HASH_LIST"
+   for x in $(cat "$HASH_LIST")
+   do
+      DATE_STR=$(date "+%Y-%m-%d-%s")
+      HASH_CON_IP=$(grep -w "$x" "$REPORT_DIR" | grep -oE '[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+')
+      get_hash &
+   done >> /home/murphinator/hello_miner/logs/Hash_Out.txt
    wait
    sort /home/murphinator/hello_miner/logs/Count_Out.txt >> /tmp/log/home/murphinator/hello_miner/logs/Count_Log.txt
    sort /home/murphinator/hello_miner/logs/Count_Out.txt
