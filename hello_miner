@@ -82,13 +82,14 @@ eval set -- "$PARAMS"
 
 echo "$START_CON"
 
-
+SOURCE_DIR="/home/murphinator/hello_miner/"
+SOURCE_LOGS="/home/murphinator/hello_miner/logs/"
 
 #############################################
 ### LAST REPORT:  -l  --last
 #############################################
 
-[[ "$LAST_REPORT" == 1 ]] && cat /tmp/log/last.txt && exit 1
+[[ "$LAST_REPORT" == 1 ]] && cat ${SOURCE_LOGS}last.txt && exit 1
 
 #############################################
 ### TIMEOUT:   -t  --timeout
@@ -116,13 +117,13 @@ fi
 ### >> $IP_OUTPUT = /tmp/log/ip_output.txt
 #############################################
 
-DHCP_LEASES="/home/murphinator/hello_miner/dhcp_config"
-DHCP_IPs="/home/murphinator/hello_miner/dhcp_ips"
+DHCP_LEASES=${SOURCE_DIR}"dhcp_config"
+DHCP_IPs=${SOURCE_DIR}"dhcp_ips"
 
 if [ "$NETWORK_REFRESH" = 1 ]
 then
 
-  IP_LOG_DIR="/tmp/log/"
+  IP_LOG_DIR="${SOURCE_LOGS}"
   IP_TEMP_1="${IP_LOG_DIR}ipresults1.txt"
   IP_OUTPUT="${IP_LOG_DIR}ip_output.txt"
   NETWORK_REFRESH=${NETWORK_REFRESH} # From Arg Parse Section
@@ -177,8 +178,8 @@ then
 else # If network refresh is not specified
 
 	counter=$((0))
-	rm -p /tmp/log/online_hosts
-	online_hosts="/tmp/log/online_hosts"
+	rm -p "${SOURCE_LOGS}online_hosts"
+	online_hosts="${SOURCE_LOGS}online_hosts"
 	rm -p $online_hosts
 	touch $online_hosts
 
