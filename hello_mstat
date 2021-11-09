@@ -184,7 +184,7 @@ get_hash () {
   sed 's/^/hash\(GH\/s\),/g' /tmp/LOCAL_GHS_LIST > /tmp/LOCAL_GHS_OUT; \
   cat /tmp/LOCAL_STATS | $TEMP_LIST > /tmp/LOCAL_TEMP_LIST; \
   sed 's/^/temp,/g' /tmp/LOCAL_TEMP_LIST > \/tmp\/LOCAL_TEMP_OUT; \
-  paste -d ',' \/tmp\/LOCAL_DNA_LIST \/tmp\/LOCAL_TEMP_LIST \/tmp\/LOCAL_GHS_LIST > \/tmp\/LOCAL_OUT; \
+  awk '{printf (\"%s,\", $0); getline < \"/tmp/LOCAL_GHS_OUT\"; printf (\"%s,\", $0); getline < \"/tmp/LOCAL_TEMP_OUT\"; print $0 }' /tmp/LOCAL_DNA_OUT > LOCAL_OUT; \
   for x in \$(cat /tmp/LOCAL_GHS_LIST)
   do
     printf \"$DATE_STR,\$MYCON,\$x\\n\"
