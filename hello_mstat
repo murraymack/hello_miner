@@ -168,18 +168,26 @@ then
      HASH_CON=${!TEMP_COUNT}
 fi
 
-GHS_LIST="$CGSTATS | grep -oE 'GHSmm\[[[:digit:]]+\.[[:digit:]]+\]' | grep -oE '[[:digit:]+\.[[:digit:]]+' | cut -c 2-"
+GHS_LIST="grep -oEw 'GHSmm\[[[:digit:]]+\.[[:digit:]]+\]' | grep -oEw '[[:digit:]]+\.[[:digit:]]+'"
 GHS_AVG="$GHS_LIST | awk '{ SUM += \$1; n++ } END { if (n > 0) print SUM / n; }'"
 GHS_BOTk="$GHS_LIST | sort -nk 2 | head -n 5"
+DNA_LIST="grep -oEw 'DNA\[[[:alnum:]]+\]' | grep -oEw '[[:alnum:]]+\]' | sed 's/\]//g'"
+TEMP_LIST="grep -oEw 'Temp\[[[:digit:]]+\]' | grep -oEw '[[:digit:]]+\]' | sed 's/\]//g'"
 
 # Function to generate log string for Count of miners via ssh
 get_hash () {
   ssh -o ConnectTimeout=10 -o "StrictHostKeyChecking no" -o "BatchMode yes" root@"$HASH_CON_IP" \
-  "MYCON=\$(cat /etc/config/network | grep -oE 'CON[[:digit:]]+'); LOCAL_GHS_LIST=\$($GHS_LIST); \
-  echo \$LOCAL_GHS_LIST | sed 's, ,\n,g' > \/tmp\/LOCAL_GHS_LIST; \
+  "MYCON=\$(cat /etc/config/network | grep -oE 'CON[[:digit:]]+'); $CGSTATS > \/tmp\/LOCAL_STATS; \
+  cat /tmp/LOCAL_STATS | $DNA_LIST > /tmp/LOCAL_DNA_LIST; \
+  sed 's/^/dna,/g' /tmp/LOCAL_DNA_LIST > /tmp/LOCAL_DNA_OUT; \
+  cat /tmp/LOCAL_STATS | $GHS_LIST > /tmp/LOCAL_GHS_LIST; \
+  sed 's/^/hash\(GH\/s\),/g' /tmp/LOCAL_GHS_LIST > /tmp/LOCAL_GHS_OUT; \
+  cat /tmp/LOCAL_STATS | $TEMP_LIST > /tmp/LOCAL_TEMP_LIST; \
+  sed 's/^/temp,/g' /tmp/LOCAL_TEMP_LIST > \/tmp\/LOCAL_TEMP_OUT; \
+  paste -d ',' \/tmp\/LOCAL_DNA_LIST \/tmp\/LOCAL_TEMP_LIST \/tmp\/LOCAL_GHS_LIST > \/tmp\/LOCAL_OUT; \
   for x in \$(cat /tmp/LOCAL_GHS_LIST)
   do
-    printf \"$DATE_STR,\$MYCON,Hash,\$x\\n\"
+    printf \"$DATE_STR,\$MYCON,\$x\\n\"
   done;"
   }
 
