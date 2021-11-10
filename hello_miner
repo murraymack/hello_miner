@@ -202,6 +202,8 @@ else # If network refresh is not specified
 
 	done <$DHCP_LEASES
 
+	echo "" > "${SOURCE_LOGS}online_hosts"
+
 	sleep 1
 
 	IP_OUTPUT=$( cat $DHCP_IPs )
