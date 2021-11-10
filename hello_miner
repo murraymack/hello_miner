@@ -221,7 +221,7 @@ for ip in $( cat $DHCP_IPs ); do
 done
 wait
 
-HOSTS_AND_IPS="/tmp/log/hosts_and_ips.txt"
+HOSTS_AND_IPS="${SOURCE_LOGS}hosts_and_ips.txt"
 rm "$HOSTS_AND_IPS"
 touch "$HOSTS_AND_IPS"
 
@@ -235,14 +235,14 @@ sort -o "$HOSTS_AND_IPS"{,}
 
 echo "Network Host Names Obtained"
 
-HOST_NUMBERS="/tmp/log/host_numbers.txt"
+HOST_NUMBERS="${SOURCE_LOGS}host_numbers.txt"
 grep -oE "CON[[:alnum:]]+" "$HOSTS_AND_IPS" | grep -oE "[[:digit:]]+" > "$HOST_NUMBERS"
 
 START=$(head -1 "$HOST_NUMBERS")
 FINISH=$(tail -1 "$HOST_NUMBERS")
 START_NUM=$(expr "$START")
 FINISH_NUM=$(expr "$FINISH")
-REPORT_OUT="/tmp/log/last.txt" 2> /dev/null
+REPORT_OUT="${SOURCE_LOGS}last.txt" 2> /dev/null
 rm "$REPORT_OUT" 2> /dev/null
 
 for i in $(seq "$START_NUM" "$FINISH_NUM"); do
@@ -312,7 +312,7 @@ fi
 
 if [[ ${#RESET_CON} -gt 0 ]];
 then
-   RESET_LIST="/tmp/log/reset_list"
+   RESET_LIST="${SOURCE_LOGS}reset_list"
    echo "$RESET_CON" | awk -F',' '{for(i=1;i<=NF;i++){print $i}}' > "$RESET_LIST"
    for x in $(cat "$RESET_LIST");
    do
@@ -329,7 +329,7 @@ fi
 
 if [[ ${#START_CON} -gt 0 ]];
 then
-   START_LIST="/tmp/log/start_list"
+   START_LIST="${SOURCE_LOGS}start_list"
    echo "$START_CON" | awk -F',' '{for(i=1;i<=NF;i++){print $i}}' > "$START_LIST"
    for x in $(cat "$START_LIST");
    do
@@ -346,7 +346,7 @@ fi
 
 if [[ ${#STOP_CON} -gt 0 ]];
 then
-   STOP_LIST="/tmp/log/stop_list"
+   STOP_LIST="${SOURCE_LOGS}stop_list"
    echo "$STOP_CON" | awk -F',' '{for(i=1;i<=NF;i++){print $i}}' > "$STOP_LIST"
    for x in $(cat "$STOP_LIST");
    do
