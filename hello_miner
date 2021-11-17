@@ -339,7 +339,7 @@ then
       echo ""
       echo "STARTING ${x} at ${START_IP}"
       ##### SSH START COMMANDS HERE #####
-      ssh root@"$START_IP" "printf 'SSH successful... Starting ' && cat /tmp/log/con.txt; mkdir -p /etc/tmp/; echo \"*/3 * * * * /usr/bin/cgminer-monitor\" > /etc/tmp/root; crontab -u root /etc/tmp/root; /usr/bin/cgminer-monitor >/dev/null 2>&1; echo "Start Successful"; exit"
+      ssh root@"$START_IP" "printf 'SSH successful... Starting ' && cat /tmp/log/con.txt; mkdir -p /etc/tmp/; echo \"*/3 * * * * /usr/bin/cgminer-monitor\" > /etc/tmp/root; crontab -u root /etc/tmp/root; /usr/bin/cgminer-monitor >/dev/null 2>&1; ps | grep cgminer && echo "Start Successful"; exit"
       date
       ##### SSH START COMMANDS HERE #####
    done
