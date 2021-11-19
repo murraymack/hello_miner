@@ -1,0 +1,122 @@
+#!/bin/bash
+
+while (( "$#" )); do
+  case "$1" in
+     -cmd|--command)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        COMMAND=$2
+        shift 2
+      else
+        echo "Error: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    -src|--source)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        src=$2
+        shift 2
+      else
+        echo "Error: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    -dst|--destination)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        dst=$2
+        shift 2
+      else
+        echo "Error: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    -l|--last)
+      LAST_REPORT=1
+      shift
+      ;;
+    -reset|--reset)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        RESET_CON=$2
+        shift 2
+      else
+        echo "Error: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    -stop|--stop)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        STOP_CON=$2
+        shift 2
+      else
+        echo "Error: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    -start|--start)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        START_CON=$2
+        shift 2
+      else
+        echo "Error: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    -*|--*=) # unsupported flags
+      echo "Error: Unsupported flag $1" >&2
+      exit 1
+      ;;
+    *) # preserve positional arguments
+      PARAMS="$PARAMS $1"
+      shift
+      ;;
+  esac
+done
+
+eval set -- "$PARAMS"
+
+echo "$START_CON"
+
+SOURCE_DIR="/home/murphinator/hello_miner/"
+SOURCE_LOGS="/home/murphinator/hello_miner/logs/"
+DHCP_LEASES=${SOURCE_DIR}"dhcp_config"
+DHCP_IPs=${SOURCE_DIR}"dhcp_ips"
+
+counter=$((0))
+rm -p "${SOURCE_LOGS}online_hosts"
+online_hosts="${SOURCE_LOGS}online_hosts"
+rm -p $online_hosts
+touch $online_hosts
+
+while read p; do
+
+  # Regenerate $DHCP_IPs in case config changed
+  if [ $counter -eq 0 ];
+  then
+    echo "Reinstancing DHCP_IPs at $DHCP_IPs"
+    rm $DHCP_IPs
+    touch $DHCP_IPs
+  fi
+
+  counter=$(($counter+1))
+
+  ip=$(echo "$p" | grep -oE "[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+")
+  echo $ip >> $DHCP_IPs
+  echo "[ $counter ] Pinging $ip ..."
+  fping -t 1000 $ip >> $online_hosts 2> /dev/null &
+
+done <$DHCP_LEASES
+
+echo "" > "${SOURCE_LOGS}online_hosts"
+
+sleep 1
+
+IP_OUTPUT=$( cat $DHCP_IPs )
+
+if [[ ${#src} -gt 0 && ${#dst} -gt 0 ]];
+then
+	for ip in $( cat $DHCP_IPs ); do
+	  echo "sending ssh into $ip ..."
+	  scp "${src}" root@"${ip}:${dst}" &
+	done
+	wait
+
+fi
