@@ -176,14 +176,14 @@ TEMP_LIST="grep -oEw 'Temp\[[[:digit:]]+\]' | grep -oEw '[[:digit:]]+\]' | sed '
 
 # Function to generate log string for Count of miners via ssh
 get_hash () {
-`ssh -o ConnectTimeout=10 -o "StrictHostKeyChecking no" -o "BatchMode yes" root@"$HASH_CON_IP" << 'EOF'
+`ssh -T -o "StrictHostKeyChecking no" -o "BatchMode yes" root@"$HASH_CON_IP" << 'EOF'
 MYCON="cat /etc/config/network | grep -oE 'CON[[:digit:]]+'"
 cgminer-api -o stats > /tmp/LOCAL_STATS
 cat /tmp/LOCAL_STATS | grep -oEw 'DNA\[[[:alnum:]]+\]' | grep -oEw '[[:alnum:]]+\]' | sed 's/\]//g' > /tmp/LOCAL_DNA_LIST
 sed 's/^/dna,/g' /tmp/LOCAL_DNA_LIST > /tmp/LOCAL_DNA_OUT
 cat /tmp/LOCAL_STATS | grep -oEw 'GHSmm\[[[:digit:]]+\.[[:digit:]]+\]' | grep -oEw '[[:digit:]]+\.[[:digit:]]+' > /tmp/LOCAL_GHS_LIST
 sed 's/^/hash\(GH\/s\),/g' /tmp/LOCAL_GHS_LIST > /tmp/LOCAL_GHS_OUT
-cat /tmp/LOCAL_STATS | grep -oEw 'Temp\[[[:digit:]]+\]' | grep -oEw '[[:digit:]]+\]' | sed 's/\]//g' > /tmp/LOCAL_TEMP_LIST
+cat /tmp/LOCAL_STATS | grep -oEw 'Temp\[[-]?[[:digit:]]+\]' | grep -oEw '[-]?[[:digit:]]+' > /tmp/LOCAL_TEMP_LIST
 sed 's/^/temp,/g' /tmp/LOCAL_TEMP_LIST > /tmp/LOCAL_TEMP_OUT
 awk '{printf ("%s,", $0); getline < "/tmp/LOCAL_GHS_OUT"; printf ("%s,", $0); getline < "/tmp/LOCAL_TEMP_OUT"; print $0 }' /tmp/LOCAL_DNA_OUT > /tmp/LOCAL_NEW
 for x in "cat /tmp/LOCAL_NEW"
