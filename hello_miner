@@ -67,6 +67,15 @@ while (( "$#" )); do
         exit 1
       fi
       ;;
+    -reboot|--reboot)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        REBOOT_CON=$2
+        shift 2
+      else
+        echo "Error: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
     -*|--*=) # unsupported flags
       echo "Error: Unsupported flag $1" >&2
       exit 1
@@ -308,6 +317,13 @@ if [[ "$START_CON" =~ ^($LIST_PRESETS)$ ]];
      START_CON=${!TEMP_START}
 fi
 
+if [[ "$REBOOT_CON" =~ ^($LIST_PRESETS)$ ]];
+   then
+     REBOOT_ARG=$REBOOT_CON
+     TEMP_REBOOT=$(echo ${LIST_PRESETS} | grep -oE "$REBOOT_CON")
+     REBOOT_CON=${!TEMP_REBOOT}
+fi
+
 #############################################
 ### RESET START STOP
 #############################################
@@ -357,6 +373,23 @@ then
       echo "Stopping ${x} at ${STOP_IP}"
       ##### SSH STOP COMMANDS HERE #####
       ssh root@"$STOP_IP" "printf 'SSH successful... Stopping ' && cat /tmp/log/con.txt; mkdir -p /etc/tmp/; echo \"\" > /etc/tmp/root; crontab -u root /etc/tmp/root; killall cgminer && echo "Stop successful""
+      date
+      ##### SSH STOP COMMANDS HERE #####
+   done
+   wait
+fi
+
+if [[ ${#REBOOT_CON} -gt 0 ]];
+then
+   REBOOT_LIST="${SOURCE_LOGS}reboot_list"
+   echo "$REBOOT_CON" | awk -F',' '{for(i=1;i<=NF;i++){print $i}}' > "$REBOOT_LIST"
+   for x in $(cat "$REBOOT_LIST");
+   do
+      echo ""
+      STOP_IP=$(grep -w "$x" "$REPORT_OUT" | grep -oE '[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+')
+      echo "Rebooting ${x} at ${STOP_IP}"
+      ##### SSH STOP COMMANDS HERE #####
+      ssh root@"$STOP_IP" "printf 'SSH successful... Rebooting ' && cat /tmp/log/con.txt; reboot"
       date
       ##### SSH STOP COMMANDS HERE #####
    done
